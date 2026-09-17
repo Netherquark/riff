@@ -100,7 +100,7 @@ impl SidebarModel {
             api.unfollow_playlist(&id).await?;
             if pin_enabled {
                 if let Some(user_id) = user_id {
-                    settings::unpin_playlist(&user_id, &id);
+                    settings::unpin_object(&user_id, settings::PinnedKind::Playlist, &id);
                 }
             }
             Ok(AppAction::RemovePlaylist(id))
@@ -172,10 +172,10 @@ impl SidebarModel {
         let Some(user_id) = self.logged_user_id() else {
             return;
         };
-        let changed = if settings::is_playlist_pinned(&user_id, id) {
-            settings::unpin_playlist(&user_id, id)
+        let changed = if settings::is_object_pinned(&user_id, id, settings::PinnedKind::Playlist) {
+            settings::unpin_object(&user_id, settings::PinnedKind::Playlist, id)
         } else {
-            settings::pin_playlist(&user_id, id)
+            settings::pin_object(&user_id, settings::PinnedKind::Playlist, id)
         };
         if changed {
             self.dispatcher
@@ -201,7 +201,8 @@ impl SidebarModel {
                 }
             })
             .collect();
-        let _ = settings::prune_pinned_playlists(&user_id, &saved_ids);
+        let _ =
+            settings::prune_pinned_objects(&user_id, settings::PinnedKind::Playlist, &saved_ids);
     }
 
     pub fn apply_playlist_sidebar_items(
@@ -222,9 +223,15 @@ impl SidebarModel {
         let mut items = Vec::new();
         let pinned_enabled = is_enabled(FeatureFlag::PinnedPlaylists);
         let playlists = self.get_playlists();
-        let pinned_ids = self
+        let pinned_ids: Vec<String> = self
             .logged_user_id()
-            .map(|user_id| settings::get_pinned_playlist_ids(&user_id))
+            .map(|user_id| {
+                settings::get_pinned_objects(&user_id)
+                    .into_iter()
+                    .filter(|o| o.kind == settings::PinnedKind::Playlist)
+                    .map(|o| o.id)
+                    .collect()
+            })
             .unwrap_or_default();
 
         if pinned_enabled {
